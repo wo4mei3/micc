@@ -192,29 +192,29 @@ static Type *find_tag(Token *tok) {
   return NULL;
 }
 
-static bool find_kind(Token *tok) {
+static bool find_kind(char *name) {
   for (MetaParam *meta = current_meta_param; meta; meta = meta->next) {
-    if (equal(meta->kind, tok->loc))
+    if (equal(meta->kind, name))
       return true;
   }
   return false;
 }
 
-static int find_depth(Token *tok) {
-  int depth = 0;
+static int find_depth(char *name) {
+  int depth = 1;
   for (Scope *sc = scope; sc; sc = sc->next) {
-    if (equal(sc->depth, tok->loc))
+    if (equal(sc->depth, name))
       return depth;
     depth++;
   }
   for (MetaParam *meta = current_meta_param; meta; meta = meta->next) {
     if (meta->kind)
       continue;
-    if (equal(meta->depth, tok->loc))
+    if (equal(meta->depth, name))
       return depth;
     depth++;
   }
-  return -1;
+  return 0;
 }
 
 static Node *new_node(NodeKind kind, Token *tok) {
@@ -693,10 +693,19 @@ static Type *type_suffix(Token **rest, Token *tok, Type *ty) {
   return ty;
 }
 
-// pointers = ("*" ("const" | "volatile" | "restrict")*)*
 static Type *pointers(Token **rest, Token *tok, Type *ty) {
-  while (consume(&tok, tok, "*")) {
+  while (equal(tok, "*") 
+         ||(tok->kind == TK_IDENT && equal(tok->next, "*") )
+         || (tok->kind == TK_IDENT && tok->next->kind == TK_IDENT && equal(tok->next->next, "*"))
+         ) {
     ty = pointer_to(ty);
+    if (equal(tok, "*")) {
+      tok = skip(tok, "*");
+    } else if (tok->kind == TK_IDENT && equal(tok->next, "*")) {
+      tok = skip(tok->next, "*");
+    } else if (tok->kind == TK_IDENT && tok->next->kind == TK_IDENT && equal(tok->next->next, "*")) {
+      tok = skip(tok->next->next, "*");
+    } 
     while (equal(tok, "const") || equal(tok, "volatile") || equal(tok, "restrict") ||
            equal(tok, "__restrict") || equal(tok, "__restrict__"))
       tok = tok->next;
@@ -708,7 +717,6 @@ static Type *pointers(Token **rest, Token *tok, Type *ty) {
 // declarator = pointers ("(" ident ")" | "(" declarator ")" | ident) type-suffix
 static Type *declarator(Token **rest, Token *tok, Type *ty) {
   ty = pointers(&tok, tok, ty);
-
   if (equal(tok, "(")) {
     Token *start = tok;
     Type dummy = {};
@@ -877,7 +885,6 @@ static Node *declaration(Token **rest, Token *tok, Type *basety, VarAttr *attr) 
   while (!equal(tok, ";")) {
     if (i++ > 0)
       tok = skip(tok, ",");
-
     Type *ty = declarator(&tok, tok, basety);
     if (ty->kind == TY_VOID)
       error_tok(tok, "variable declared void");
@@ -1830,7 +1837,6 @@ static Node *compound_stmt(Token **rest, Token *tok, Token *depth) {
 
   node->body = head.next;
   *rest = tok->next;
-  printf((*rest)->loc);
   return node;
 }
 
@@ -2578,7 +2584,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
   Member head = {};
   Member *cur = &head;
   int idx = 0;
-
   while (!equal(tok, "}")) {
     VarAttr attr = {};
     Type *basety = declspec(&tok, tok, &attr);
@@ -2600,7 +2605,6 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
       if (!first)
         tok = skip(tok, ",");
       first = false;
-
       Member *mem = calloc(1, sizeof(Member));
       mem->ty = declarator(&tok, tok, basety);
       mem->name = mem->ty->name;

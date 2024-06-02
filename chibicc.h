@@ -27,6 +27,8 @@
 
 typedef struct Type Type;
 typedef struct Node Node;
+typedef struct MetaParam MetaParam;
+typedef struct MetaArg MetaArg;
 typedef struct Member Member;
 typedef struct Relocation Relocation;
 typedef struct Hideset Hideset;
@@ -323,6 +325,8 @@ struct Type {
   int align;          // alignment
   bool is_unsigned;   // unsigned or signed
   bool is_atomic;     // true if _Atomic
+  bool is_const;
+  bool is_dropped;
   Type *origin;       // for type compatibility check
 
   // Pointer-to or array-of type. We intentionally use the same member
@@ -346,6 +350,9 @@ struct Type {
   Node *vla_len; // # of elements
   Obj *vla_size; // sizeof() value
 
+  MetaParam *meta_params;
+  MetaArg *meta_args;
+
   // Struct
   Member *members;
   bool is_flexible;
@@ -357,6 +364,18 @@ struct Type {
   bool is_variadic;
   Type *next;
 };
+
+struct MetaParam {
+  MetaParam *next;
+  Token *depth;
+  Token *kind; 
+};
+
+struct MetaArg {
+  MetaParam *next;
+  Token *name; 
+};
+
 
 // Struct member
 struct Member {

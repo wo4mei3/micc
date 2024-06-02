@@ -3288,6 +3288,44 @@ static Token *global_variable(Token *tok, Type *basety, VarAttr *attr) {
   return tok;
 }
 
+static bool is_lifetime(Token *tok) {
+  if (equal(tok, "lifetime"))
+    return true;
+  return false;
+}
+
+MetaParam* lifetime(Token **rest, Token *tok) {
+  tok = skip(tok,"lifetime");
+  tok = skip(tok, "<");
+  bool first = true;
+
+  MetaParam* meta_param = NULL;
+  while (!consume(&tok, tok, ">")){
+    if (!first)
+      tok = skip(tok, ",");
+    first = false;
+    if (consume(&tok, tok, "kind")) {
+      MetaParam* new_param = calloc(1, sizeof(MetaParam));
+      new_param->kind = tok;
+      tok = tok->next;
+      new_param->next = meta_param;
+      meta_param = new_param;
+      continue;
+    } 
+    if (consume(&tok, tok, "depth")) {
+      MetaParam* new_param = calloc(1, sizeof(MetaParam));
+      new_param->depth = tok;
+      tok = tok->next;
+      new_param->next = meta_param;
+      meta_param = new_param;
+      continue;
+    } 
+  }
+  *rest = tok;
+  return meta_param;
+}
+
+
 // Lookahead tokens and returns true if a given token is a start
 // of a function definition or declaration.
 static bool is_function(Token *tok) {
@@ -3337,25 +3375,39 @@ static void declare_builtin_functions(void) {
 Obj *parse(Token *tok) {
   declare_builtin_functions();
   globals = NULL;
-
   while (tok->kind != TK_EOF) {
     VarAttr attr = {};
-    Type *basety = declspec(&tok, tok, &attr);
-
-    // Typedef
-    if (attr.is_typedef) {
-      tok = parse_typedef(tok, basety);
-      continue;
+    if (is_lifetime(tok)) {
+      MetaParam *meta_param = lifetime(&tok, tok);
+      Type *basety = declspec(&tok, tok, &attr);
+      // Function
+      if (is_function(tok)) {
+        tok = function(tok, basety, &attr);
+        continue;
+      } else {
+        tok = skip(tok, ";");
+      }
+      // Typedef
+      if (attr.is_typedef) {
+        error_tok(tok, "typedef with lifetime parameter not supported");
+      }
+      
+    } else {
+      Type *basety = declspec(&tok, tok, &attr);
+      if (attr.is_typedef) {
+        tok = parse_typedef(tok, basety);
+        continue;
+      }
+      
+      // Function
+      if (is_function(tok)) {
+        tok = function(tok, basety, &attr);
+        continue;
+      }
+      
+      // Global variable
+      tok = global_variable(tok, basety, &attr);
     }
-
-    // Function
-    if (is_function(tok)) {
-      tok = function(tok, basety, &attr);
-      continue;
-    }
-
-    // Global variable
-    tok = global_variable(tok, basety, &attr);
   }
 
   for (Obj *var = globals; var; var = var->next)

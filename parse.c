@@ -36,6 +36,8 @@ struct Scope {
   // the other is for struct/union/enum tags.
   HashMap vars;
   HashMap tags;
+
+  Token *depth;
 };
 
 // Variable attributes such as typedef or extern.
@@ -88,6 +90,7 @@ static Obj *locals;
 static Obj *globals;
 
 static Scope *scope = &(Scope){};
+static MetaParam *current_meta_param;
 
 // Points to the function object the parser is currently parsing.
 static Obj *current_fn;
@@ -187,6 +190,31 @@ static Type *find_tag(Token *tok) {
       return ty;
   }
   return NULL;
+}
+
+static bool find_kind(Token *tok) {
+  for (MetaParam *meta = current_meta_param; meta; meta = meta->next) {
+    if (equal(meta->kind, tok->loc))
+      return true;
+  }
+  return false;
+}
+
+static int find_depth(Token *tok) {
+  int depth = 0;
+  for (Scope *sc = scope; sc; sc = sc->next) {
+    if (equal(sc->depth, tok->loc))
+      return depth;
+    depth++;
+  }
+  for (MetaParam *meta = current_meta_param; meta; meta = meta->next) {
+    if (meta->kind)
+      continue;
+    if (equal(meta->depth, tok->loc))
+      return depth;
+    depth++;
+  }
+  return -1;
 }
 
 static Node *new_node(NodeKind kind, Token *tok) {
@@ -3198,6 +3226,7 @@ static void mark_live(Obj *var) {
 
 static Token *function(Token *tok, Type *basety, VarAttr *attr) {
   Type *ty = declarator(&tok, tok, basety);
+  ty->meta_params = current_meta_param;
   if (!ty->name)
     error_tok(ty->name_pos, "function name omitted");
   char *name_str = get_ident(ty->name);
@@ -3322,6 +3351,7 @@ MetaParam* lifetime(Token **rest, Token *tok) {
     } 
   }
   *rest = tok;
+  current_meta_param = meta_param;
   return meta_param;
 }
 

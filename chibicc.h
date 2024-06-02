@@ -367,13 +367,13 @@ struct Type {
 
 struct MetaParam {
   MetaParam *next;
-  Token *depth;
-  Token *kind; 
+  char *depth;
+  char *kind; 
 };
 
 struct MetaArg {
   MetaParam *next;
-  Token *name; 
+  char *name; 
 };
 
 

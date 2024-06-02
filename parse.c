@@ -37,7 +37,7 @@ struct Scope {
   HashMap vars;
   HashMap tags;
 
-  Token *depth;
+  char *depth;
 };
 
 // Variable attributes such as typedef or extern.
@@ -194,7 +194,9 @@ static Type *find_tag(Token *tok) {
 
 static bool find_kind(char *name) {
   for (MetaParam *meta = current_meta_param; meta; meta = meta->next) {
-    if (equal(meta->kind, name))
+    if (meta->kind == NULL || meta->depth != NULL)
+      continue;
+    if (strcmp(meta->kind, name) == 0) 
       return true;
   }
   return false;
@@ -202,15 +204,17 @@ static bool find_kind(char *name) {
 
 static int find_depth(char *name) {
   int depth = 1;
-  for (Scope *sc = scope; sc; sc = sc->next) {
-    if (equal(sc->depth, name))
-      return depth;
-    depth++;
+  if (!scope) {
+    for (Scope *sc = scope; sc; sc = sc->next) {
+      if (strcmp(sc->depth, name) == 0)
+        return depth;
+      depth++;
+    }
   }
   for (MetaParam *meta = current_meta_param; meta; meta = meta->next) {
-    if (meta->kind)
+    if (meta->kind != NULL || meta->depth == NULL)
       continue;
-    if (equal(meta->depth, name))
+    if (strcmp(meta->depth, name) == 0)
       return depth;
     depth++;
   }
@@ -702,8 +706,14 @@ static Type *pointers(Token **rest, Token *tok, Type *ty) {
     if (equal(tok, "*")) {
       tok = skip(tok, "*");
     } else if (tok->kind == TK_IDENT && equal(tok->next, "*")) {
+      if(!find_depth(get_ident(tok)))
+        error_tok(tok, "unknown depth");
       tok = skip(tok->next, "*");
     } else if (tok->kind == TK_IDENT && tok->next->kind == TK_IDENT && equal(tok->next->next, "*")) {
+      if(!find_depth(get_ident(tok)))
+        error_tok(tok, "unknown depth");
+      if (!find_kind(get_ident(tok->next)))
+        error_tok(tok->next, "unknown kind");
       tok = skip(tok->next->next, "*");
     } 
     while (equal(tok, "const") || equal(tok, "volatile") || equal(tok, "restrict") ||
@@ -1805,7 +1815,7 @@ static Node *compound_stmt(Token **rest, Token *tok, Token *depth) {
   Node *cur = &head;
 
   enter_scope();
-  scope->depth = depth;
+  scope->depth = get_ident(depth);
   while (!equal(tok, "}")) {
     if (is_typename(tok) && !equal(tok->next, ":")) {
       VarAttr attr = {};
@@ -3349,7 +3359,8 @@ MetaParam* lifetime(Token **rest, Token *tok) {
     first = false;
     if (consume(&tok, tok, "kind")) {
       MetaParam* new_param = calloc(1, sizeof(MetaParam));
-      new_param->kind = tok;
+      new_param->depth = NULL;
+      new_param->kind = get_ident(tok);
       tok = tok->next;
       new_param->next = meta_param;
       meta_param = new_param;
@@ -3357,7 +3368,8 @@ MetaParam* lifetime(Token **rest, Token *tok) {
     } 
     if (consume(&tok, tok, "depth")) {
       MetaParam* new_param = calloc(1, sizeof(MetaParam));
-      new_param->depth = tok;
+      new_param->depth = get_ident(tok);
+      new_param->kind = NULL;
       tok = tok->next;
       new_param->next = meta_param;
       meta_param = new_param;

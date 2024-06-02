@@ -90,7 +90,7 @@ static Obj *locals;
 static Obj *globals;
 
 static Scope *scope = &(Scope){};
-static MetaParam *current_meta_param;
+static MetaParam *current_meta_param = NULL;
 
 // Points to the function object the parser is currently parsing.
 static Obj *current_fn;
@@ -204,14 +204,16 @@ static bool find_kind(char *name) {
 
 static int find_depth(char *name) {
   int depth = 1;
-  if (!scope) {
-    for (Scope *sc = scope; sc; sc = sc->next) {
-      if (strcmp(sc->depth, name) == 0)
-        return depth;
-      depth++;
-    }
+  for (Scope *sc = scope; sc; sc = sc->next) {
+    if (!sc->depth)
+      break;
+    if (strcmp(sc->depth, name) == 0)
+      return depth;
+    depth++;
   }
   for (MetaParam *meta = current_meta_param; meta; meta = meta->next) {
+    if (!meta) 
+      break;
     if (meta->kind != NULL || meta->depth == NULL)
       continue;
     if (strcmp(meta->depth, name) == 0)
@@ -1815,7 +1817,10 @@ static Node *compound_stmt(Token **rest, Token *tok, Token *depth) {
   Node *cur = &head;
 
   enter_scope();
-  scope->depth = get_ident(depth);
+  if (depth)
+    scope->depth = get_ident(depth);
+  else 
+    scope->depth = "";
   while (!equal(tok, "}")) {
     if (is_typename(tok) && !equal(tok->next, ":")) {
       VarAttr attr = {};

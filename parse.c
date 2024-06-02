@@ -123,7 +123,7 @@ static void initializer2(Token **rest, Token *tok, Initializer *init);
 static Initializer *initializer(Token **rest, Token *tok, Type *ty, Type **new_ty);
 static Node *lvar_initializer(Token **rest, Token *tok, Obj *var);
 static void gvar_initializer(Token **rest, Token *tok, Obj *var);
-static Node *compound_stmt(Token **rest, Token *tok);
+static Node *compound_stmt(Token **rest, Token *tok, Token *depth);
 static Node *stmt(Token **rest, Token *tok);
 static Node *expr_stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
@@ -1780,21 +1780,25 @@ static Node *stmt(Token **rest, Token *tok) {
     labels = node;
     return node;
   }
-
+  Token *depth = NULL;
+  if (equal(tok, "using")){
+    depth = tok->next;
+    tok = tok->next->next;
+  }
   if (equal(tok, "{"))
-    return compound_stmt(rest, tok->next);
+    return compound_stmt(rest, tok->next, depth);
 
   return expr_stmt(rest, tok);
 }
 
 // compound-stmt = (typedef | declaration | stmt)* "}"
-static Node *compound_stmt(Token **rest, Token *tok) {
+static Node *compound_stmt(Token **rest, Token *tok, Token *depth) {
   Node *node = new_node(ND_BLOCK, tok);
   Node head = {};
   Node *cur = &head;
 
   enter_scope();
-
+  scope->depth = depth;
   while (!equal(tok, "}")) {
     if (is_typename(tok) && !equal(tok->next, ":")) {
       VarAttr attr = {};
@@ -1826,6 +1830,7 @@ static Node *compound_stmt(Token **rest, Token *tok) {
 
   node->body = head.next;
   *rest = tok->next;
+  printf((*rest)->loc);
   return node;
 }
 
@@ -3011,10 +3016,10 @@ static Node *generic_selection(Token **rest, Token *tok) {
 static Node *primary(Token **rest, Token *tok) {
   Token *start = tok;
 
-  if (equal(tok, "(") && equal(tok->next, "{")) {
+  if (equal(tok, "(") && (equal(tok->next, "{"))) {
     // This is a GNU statement expresssion.
     Node *node = new_node(ND_STMT_EXPR, tok);
-    node->body = compound_stmt(&tok, tok->next->next)->body;
+    node->body = compound_stmt(&tok, tok->next, NULL)->body;
     *rest = skip(tok, ")");
     return node;
   }
@@ -3244,7 +3249,7 @@ static Token *function(Token *tok, Type *basety, VarAttr *attr) {
   } else {
     fn = new_gvar(name_str, ty);
     fn->is_function = true;
-    fn->is_definition = equal(tok, "{");
+    fn->is_definition = equal(tok, "{") || equal(tok, "using");
     fn->is_static = attr->is_static || (attr->is_inline && !attr->is_extern);
     fn->is_inline = attr->is_inline;
   }
@@ -3271,7 +3276,6 @@ static Token *function(Token *tok, Type *basety, VarAttr *attr) {
     fn->va_area = new_lvar("__va_area__", array_of(ty_char, 136));
   fn->alloca_bottom = new_lvar("__alloca_size__", pointer_to(ty_char));
 
-  tok = skip(tok, "{");
 
   // [https://www.sigbus.info/n1570#6.4.2.2p1] "__func__" is
   // automatically defined as a local variable containing the
@@ -3282,8 +3286,14 @@ static Token *function(Token *tok, Type *basety, VarAttr *attr) {
   // [GNU] __FUNCTION__ is yet another name of __func__.
   push_scope("__FUNCTION__")->var =
     new_string_literal(fn->name, array_of(ty_char, strlen(fn->name) + 1));
-
-  fn->body = compound_stmt(&tok, tok);
+  
+  Token *depth = NULL;
+  if (equal(tok, "using")){
+    depth = tok->next;
+    tok = tok->next->next;
+  }
+  if (equal(tok, "{"))
+  fn->body = compound_stmt(&tok, tok->next, depth);
   fn->locals = locals;
   leave_scope();
   resolve_goto_labels();
@@ -3351,7 +3361,6 @@ MetaParam* lifetime(Token **rest, Token *tok) {
     } 
   }
   *rest = tok;
-  current_meta_param = meta_param;
   return meta_param;
 }
 
@@ -3409,6 +3418,7 @@ Obj *parse(Token *tok) {
     VarAttr attr = {};
     if (is_lifetime(tok)) {
       MetaParam *meta_param = lifetime(&tok, tok);
+      current_meta_param = meta_param;
       Type *basety = declspec(&tok, tok, &attr);
       // Function
       if (is_function(tok)) {
@@ -3421,7 +3431,7 @@ Obj *parse(Token *tok) {
       if (attr.is_typedef) {
         error_tok(tok, "typedef with lifetime parameter not supported");
       }
-      
+      current_meta_param = NULL;
     } else {
       Type *basety = declspec(&tok, tok, &attr);
       if (attr.is_typedef) {

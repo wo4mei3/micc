@@ -1471,7 +1471,6 @@ static void emit_text(Obj *prog) {
   for (Obj *fn = prog; fn; fn = fn->next) {
     if (!fn->is_function || !fn->is_definition)
       continue;
-
     // No code is emitted for "static inline" functions
     // if no one is referencing them.
     if (!fn->is_live)

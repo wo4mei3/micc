@@ -3,8 +3,10 @@
 **/*.o
 **/*.s
 **/a.out
+**/*.json
 /tmp*
 /thirdparty
 /chibicc
+/micc
 /test/*.exe
 /stage2

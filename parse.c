@@ -157,6 +157,7 @@ static Node *primary(Token **rest, Token *tok);
 static Token *parse_typedef(Token *tok, Type *basety);
 static bool is_function(Token *tok);
 static Token *function(Token *tok, Type *basety, VarAttr *attr);
+static MetaArg* metaarg(Token **rest, Token *tok);
 static Token *global_variable(Token *tok, Type *basety, VarAttr *attr);
 
 static int align_down(int n, int align) {
@@ -2685,6 +2686,7 @@ static Token *attribute_list(Token *tok, Type *ty) {
 static Type *struct_union_decl(Token **rest, Token *tok) {
   Type *ty = struct_type();
   tok = attribute_list(tok, ty);
+  ty->meta_params = current_meta_param;
 
   // Read a tag.
   Token *tag = NULL;
@@ -2697,9 +2699,21 @@ static Type *struct_union_decl(Token **rest, Token *tok) {
     *rest = tok;
 
     Type *ty2 = find_tag(tag);
-    if (ty2)
+    if (ty2) {
+      if (ty2->meta_params) {
+        if (equal(tok, "<")){
+          tok = tok->next;
+          ty2->meta_args = metaarg(rest, tok);  
+        } else {
+          error_tok(tok, "expected lifetime arguments");
+        }          
+      } else {
+       if (equal(tok, "<")) {
+        error_tok(tok, "expected no lifetime arguments");
+       }
+      }
       return ty2;
-
+    }
     ty->size = -1;
     push_tag_scope(tag, ty);
     return ty;
@@ -3352,7 +3366,7 @@ static bool is_lifetime(Token *tok) {
   return false;
 }
 
-MetaParam* lifetime(Token **rest, Token *tok) {
+static MetaParam* lifetime(Token **rest, Token *tok) {
   tok = skip(tok,"lifetime");
   tok = skip(tok, "<");
   bool first = true;
@@ -3385,6 +3399,20 @@ MetaParam* lifetime(Token **rest, Token *tok) {
   return meta_param;
 }
 
+static MetaArg* metaarg(Token **rest, Token *tok) {
+  MetaArg head = {};
+  MetaArg *cur = &head;
+
+  while (!equal(tok, ">")) {
+    if (cur != &head)
+      tok = skip(tok, ",");
+    tok = tok->next;
+    cur = cur->next = calloc(1, sizeof(MetaArg));
+  }
+
+  *rest = skip(tok, ">");
+  return NULL;
+}
 
 // Lookahead tokens and returns true if a given token is a start
 // of a function definition or declaration.

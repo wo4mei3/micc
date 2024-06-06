@@ -372,7 +372,7 @@ struct MetaParam {
 };
 
 struct MetaArg {
-  MetaParam *next;
+  MetaArg *next;
   char *name; 
 };
 

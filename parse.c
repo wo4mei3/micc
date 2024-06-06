@@ -2892,8 +2892,35 @@ static Node *postfix(Token **rest, Token *tok) {
   Node *node = primary(&tok, tok);
 
   for (;;) {
+
+    if (equal(tok, "<")) {
+      add_type(node);
+      Type *ty = (node->ty->kind == TY_FUNC) ? node->ty : node->ty->base;
+      if (ty->meta_params) {
+        if (equal(tok, "<")){
+          tok = tok->next;
+          ty->meta_args = metaarg(&tok, tok);  
+          if (equal(tok, "(")) {
+            node = funcall(&tok, tok->next, node);
+            continue;
+          }
+        } else {
+          error_tok(tok, "expected lifetime arguments");
+        }         
+      } else if (equal(tok, "<")) {
+        error_tok(tok, "expected no lifetime arguments");
+      } 
+      continue;
+    }
+  
     if (equal(tok, "(")) {
-      node = funcall(&tok, tok->next, node);
+      add_type(node);
+      Type *ty = (node->ty->kind == TY_FUNC) ? node->ty : node->ty->base;
+      if (ty->meta_params) {
+        error_tok(tok, "expected lifetime arguments");        
+      } else {
+        node = funcall(&tok, tok->next, node);
+      } 
       continue;
     }
 
